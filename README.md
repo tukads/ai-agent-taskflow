@@ -14,7 +14,6 @@ TaskFlow separates an agent's temporary conversation from the durable record of 
 
 ![TaskFlow walkthrough: task starts, progress is saved, the session is interrupted, a new session reads state, then checks actual outcomes before continuing.](assets/taskflow-walkthrough.png)
 
-[Edit the diagram in Draw.io](assets/taskflow-walkthrough.drawio) · [View full-size image](assets/taskflow-walkthrough.png)
 
 Saved state preserves the handoff; the new session checks results before deciding what to do next.
 
