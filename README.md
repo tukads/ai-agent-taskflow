@@ -24,6 +24,20 @@ Keep work state outside the model session. Update it explicitly as work proceeds
 
 The core has no database or message-broker requirement. Filesystem semantics, a scheduler and any selected agent or notification services remain dependencies.
 
+## Benefits
+
+- **Continuity across sessions:** A new session can read the recorded goal, completed work, blockers and next action instead of reconstructing everything from chat history. Resuming execution remains an explicit decision.
+- **Clear progress visibility:** People can see what is running, waiting or finished without repeatedly asking the agent for status.
+- **Low infrastructure overhead:** For small, single-host workflows, the core avoids operating a separate database or message broker.
+- **Inspectable and portable records:** Plain JSON is easy to read, back up, compare and transfer with ordinary filesystem tools. Moving records does not automatically move their referenced artifacts or runtime dependencies.
+- **Better handoffs:** A persistent owner record and linked child tasks make responsibilities, outstanding work and result locations explicit.
+- **Potentially lower token usage and cost:** A new session can load a compact task snapshot and selected results instead of replaying the full conversation. Reusing saved findings can avoid repeated analysis, while a deterministic watcher can report progress without an LLM call for every status update. Savings depend on the integration actually selecting concise context; storing JSON alone does not reduce the context sent to a model. State updates and handoffs also add overhead. Lower token usage reduces monetary cost only where billing is usage-based; subscription plans may instead benefit through reduced allowance consumption.
+- **Independent notifications:** The watcher can report the latest saved progress even when the conversational session is unavailable; it does not infer unrecorded progress or restart stalled work.
+- **Controlled notification volume:** Coalescing revisions and spacing updates lets the human follow meaningful changes without receiving every small edit.
+- **Model and channel flexibility:** The concept separates work tracking from execution and delivery, allowing different agent runtimes or notification channels through suitable adapters.
+
+The main benefit is **a small, understandable continuity layer between temporary agent sessions and long-running human goals**. These are intended design benefits, not measured performance claims or distributed-execution guarantees.
+
 ## Architecture
 
 ```text
