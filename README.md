@@ -2,7 +2,7 @@
 
 ## A Minimal File-Backed Coordination Pattern for AI Agents
 
-**Proposed by Tuka · Concept note v0.1 · September 2026**
+**Proposed by Tuka · Concept note v0.2 · September 2026**
 
 TaskFlow separates an agent's temporary conversation from the durable record of its work. A small JSON document records the goal, progress, child tasks and next action. A separate polling process turns changes into human-visible status updates.
 
