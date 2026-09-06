@@ -10,6 +10,14 @@ TaskFlow separates an agent's temporary conversation from the durable record of 
 
 **This repository publishes a design concept, not an executable framework or production-ready implementation.** The concept grew from a local agent-workflow experiment. The examples below are illustrative, not a compatibility specification for that implementation.
 
+## One task, two sessions
+
+![TaskFlow walkthrough: task starts, progress is saved, the session is interrupted, a new session reads state, then checks actual outcomes before continuing.](assets/taskflow-walkthrough.png)
+
+[Edit the diagram in Draw.io](assets/taskflow-walkthrough.drawio) · [View full-size image](assets/taskflow-walkthrough.png)
+
+Saved state preserves the handoff; the new session checks results before deciding what to do next.
+
 ## The problem
 
 An AI agent may work across multiple sessions, delegate tasks, wait for a person, or stop unexpectedly. Conversation history alone is an inconvenient source of truth for what is complete, what is blocked and what should happen next. Meanwhile, a database, broker and distributed workflow engine may be excessive for a small, single-host personal-agent setup.
