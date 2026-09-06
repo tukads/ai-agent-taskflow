@@ -4,6 +4,8 @@
 
 **Proposed by Tuka · Concept note v0.2 · September 2026**
 
+Your AI session ends. Your work shouldn’t lose its place. TaskFlow describes a lightweight way to preserve task progress, hand off work, and reduce repeated context—without a database or message broker.
+
 TaskFlow separates an agent's temporary conversation from the durable record of its work. A small JSON document records the goal, progress, child tasks and next action. A separate polling process turns changes into human-visible status updates.
 
 **This repository publishes a design concept, not an executable framework or production-ready implementation.** The concept grew from a local agent-workflow experiment. The examples below are illustrative, not a compatibility specification for that implementation.
