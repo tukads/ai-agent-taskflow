@@ -1,51 +1,43 @@
 # AI Agent TaskFlow
 
-## A Minimal File-Backed Coordination Pattern for AI Agents
+**Durable task state for long-running AI agents. Survives session restarts, needs no database, and runs on one box.**
 
-**Proposed by Tuka · Concept note v0.2 · September 2026**
-
-Your AI session ends. Your work shouldn’t lose its place. TaskFlow describes a lightweight way to preserve task progress, hand off work, and reduce repeated context—without a database or message broker.
-
-TaskFlow separates an agent's temporary conversation from the durable record of its work. A small JSON document records the goal, progress, child tasks and next action. A separate polling process turns changes into human-visible status updates.
-
-**This repository publishes a design concept, not an executable framework or production-ready implementation.** The concept grew from a local agent-workflow experiment. The examples below are illustrative, not a compatibility specification for that implementation.
+I run two AI agents on one small Linux server.
+Their sessions get recycled twice a day, and long jobs kept losing their place.
+To fix that, I started writing task state out to plain JSON files.
+A watcher script checks those files every 2 minutes and posts progress updates to Telegram.
 
 ## One task, two sessions
 
 ![TaskFlow walkthrough: task starts, progress is saved, the session is interrupted, a new session reads state, then checks actual outcomes before continuing.](assets/taskflow-walkthrough.png)
 
-
-Saved state preserves the handoff; the new session checks results before deciding what to do next.
+Saved state preserves the handoff between sessions. When a new session starts, it checks existing artifacts and decides what to do next.
 
 ## The problem
 
-An AI agent may work across multiple sessions, delegate tasks, wait for a person, or stop unexpectedly. Conversation history alone is an inconvenient source of truth for what is complete, what is blocked and what should happen next. Meanwhile, a database, broker and distributed workflow engine may be excessive for a small, single-host personal-agent setup.
+Agent sessions drop unexpectedly. An agent might run across several sessions, delegate work to a child process, or pause while waiting for input. Chat history is an awkward place to track what is finished, what is blocked, and what needs doing next. Setting up a database or a message broker is usually overkill for a single machine running a couple of personal agents.
 
 ## The idea
 
-Keep work state outside the model session. Update it explicitly as work proceeds. Observe it independently to keep the human informed.
+Store task state outside the model session in a local file. Update that file as work progresses, and read it from an independent process to keep yourself informed.
 
-1. **One document per flow:** a durable snapshot of the goal, status, revision and child tasks.
-2. **One mutation interface:** a CLI validates and serializes writes to that document.
-3. **One owner:** an agent session or human coordinates the flow; child workers report results through the same mutation interface.
-4. **One polling notification reconciler:** a watcher compares the latest revision with the last successfully reported revision.
-5. **Explicit session rehydration:** a replacement session reads unfinished flows and decides how to continue.
-
-The core has no database or message-broker requirement. Filesystem semantics, a scheduler and any selected agent or notification services remain dependencies.
+- Each flow gets a single JSON document that records its goal, status, revision number, and child tasks.
+- A CLI tool validates and serialises writes to the document.
+- A coordinator session manages the flow, while child workers post their results back through the same tool.
+- A polling watcher checks the latest file revision against the last revision it successfully reported.
+- When a session restarts, the replacement session reads the unfinished file and resumes the task.
 
 ## Benefits
 
-- **Continuity across sessions:** A new session can read the recorded goal, completed work, blockers and next action instead of reconstructing everything from chat history. Resuming execution remains an explicit decision.
-- **Clear progress visibility:** People can see what is running, waiting or finished without repeatedly asking the agent for status.
-- **Low infrastructure overhead:** For small, single-host workflows, the core avoids operating a separate database or message broker.
-- **Inspectable and portable records:** Plain JSON is easy to read, back up, compare and transfer with ordinary filesystem tools. Moving records does not automatically move their referenced artifacts or runtime dependencies.
-- **Better handoffs:** A persistent owner record and linked child tasks make responsibilities, outstanding work and result locations explicit.
-- **Potentially lower token usage and cost:** A new session can load a compact task snapshot and selected results instead of replaying the full conversation. Reusing saved findings can avoid repeated analysis, while a deterministic watcher can report progress without an LLM call for every status update. Savings depend on the integration actually selecting concise context; storing JSON alone does not reduce the context sent to a model. State updates and handoffs also add overhead. Lower token usage reduces monetary cost only where billing is usage-based; subscription plans may instead benefit through reduced allowance consumption.
-- **Independent notifications:** The watcher can report the latest saved progress even when the conversational session is unavailable; it does not infer unrecorded progress or restart stalled work.
-- **Controlled notification volume:** Coalescing revisions and spacing updates lets the human follow meaningful changes without receiving every small edit.
-- **Model and channel flexibility:** The concept separates work tracking from execution and delivery, allowing different agent runtimes or notification channels through suitable adapters.
-
-The main benefit is **a small, understandable continuity layer between temporary agent sessions and long-running human goals**. These are intended design benefits, not measured performance claims or distributed-execution guarantees.
+- A replacement session picks up goals, blockers, and next steps directly from disk.
+- You can see current status without prompting the agent for updates.
+- Everything runs locally without a database or a message broker.
+- Plain JSON files are straightforward to inspect, back up, and diff with standard Unix tools.
+- Explicit parent and child task entries clarify ownership and artifact locations.
+- Loading a compact state snapshot uses fewer tokens than replaying an entire conversation history.
+- The watcher sends updates even when the agent session is idle or stopped.
+- Revision coalescing stops chat channels from getting flooded with minor status noise.
+- The file layout works with different model runtimes and notification channels.
 
 ## Architecture
 
@@ -73,7 +65,7 @@ Human-facing status channel
 Terminal flow -> archive -> retained for final notification / inspection
 ```
 
-The watcher is an observer, not the task executor. Model selection and fallback are optional execution-adapter concerns, not prerequisites of the pattern.
+The watcher only observes and reports. It does not execute tasks or manage model fallbacks.
 
 ## Illustrative state
 
@@ -104,73 +96,59 @@ The watcher is an observer, not the task executor. Model selection and fallback 
 }
 ```
 
-A parent with children forms a tree. Supporting arbitrary dependency graphs requires explicit dependency edges, cycle checks and readiness rules; it does not follow automatically from child-task records.
+Child tasks form a simple hierarchy. If you need complex dependency graphs with cycle detection, you must define and check those dependencies explicitly.
 
 ## Lifecycle
 
-Suggested states are `pending`, `running`, `waiting`, `done` and `failed`.
+Tasks move through five states: `pending`, `running`, `waiting`, `done`, and `failed`.
 
-- Creation records the goal before work begins.
-- Each meaningful update advances the revision and records a useful next action.
-- Waiting includes a reason and the condition needed to continue.
-- Completion records a result reference; failure records a reason and any recoverable work.
-- Terminal records move out of the active directory into an archive.
-
-Reopening a terminal flow should be an explicit operation or a new linked attempt, rather than silently changing its meaning.
+- Create the file with the initial goal before starting work.
+- Increment the revision and update the next action on every meaningful step.
+- Mark a task as waiting alongside the reason and the condition required to resume.
+- Record result references on completion, or failure details and salvageable work on failure.
+- Move finished files out of the active directory into an archive folder.
 
 ## Notification reconciliation
 
-A timer can run the watcher every two minutes. A minimum interval, such as 110 seconds between updates to one status message, limits notification frequency. These timings are deployment choices, not essential properties.
+A timer triggers the watcher every 2 minutes. Setting a minimum gap of 110 seconds between edits to a status message prevents notification spam.
 
-The watcher compares flow revisions against separate delivery metadata. If a newer revision is eligible for notification, it sends or edits the status message and persists the successful delivery cursor. Intermediate progress revisions may be coalesced.
+The watcher compares the current revision number in the file with a separate delivery cursor. When it finds a newer revision, it sends or updates the status message and stores the new cursor. If several revisions occur between polling ticks, they coalesce into a single notification.
 
-Terminal notifications must not disappear merely because a flow was archived. One design is to scan both active records and terminal records whose final revision has not been acknowledged. A single watcher instance or lock prevents overlapping timer runs.
+To ensure terminal statuses are delivered, the watcher scans active files as well as newly archived files whose final revision has not yet been acknowledged. A local file lock prevents multiple watcher runs from overlapping.
 
-This is reconciliation of *reported progress*, not Kubernetes-style convergence of an application's desired operational state.
+## Persistence and recovery
 
-## Persistence and recovery boundaries
+Files only survive if they were flushed to disk before a crash. A saved snapshot tells a new session where the previous run stopped, but it cannot restore an interrupted process or in-flight network call.
 
-The record survives a process restart only if it was successfully persisted and the underlying storage survives. It tells a new session what was last recorded; it does not restore an interrupted model call, shell process or network request.
+When resuming, the agent checks running tasks against actual disk artifacts before deciding whether to continue or rerun a step.
 
-After restart, the owner should inspect stale running tasks, check available result artifacts and reconcile actual outcomes before choosing to continue, retry or fail. An operation may have completed externally before its result was saved. Blind retry can repeat side effects.
+- Write changes to a temporary file first, then atomically replace the target file on the same filesystem.
+- Call filesystem sync functions if you require durability against host power cuts.
+- Use file locking to serialise concurrent reads and writes.
+- Validate JSON against a schema and keep corrupted files aside for inspection.
+- Store notification delivery cursors separately from task data.
+- Keep regular backups of task directories.
 
-Recommended implementation measures, not guarantees supplied by this concept alone:
+## Limits
 
-- Write a temporary file and atomically replace the snapshot on the same filesystem.
-- For power-loss durability, consider file and directory synchronization as supported by the platform.
-- Serialize read-check-write operations with a lock. Revision checks without an atomic critical section do not prevent lost updates.
-- Validate schemas and preserve corrupt records for diagnosis rather than discarding them.
-- Keep delivery metadata separate from authoritative work state.
-- Use stable identifiers and idempotency mechanisms where external systems support them.
-- Retain backups; atomic replacement is not protection against disk loss.
+TaskFlow is deliberately narrow in scope:
 
-A mutable snapshot is **not a write-ahead log**, an event history or a replay engine. A send can succeed before its delivery cursor is saved, so exactly-once notification delivery is not implied either.
+- It is not a distributed task queue or a worker lease system.
+- It does not provide durable execution or deterministic replay.
+- It does not guarantee exactly-once execution or notification delivery.
+- It does not handle automated DAG scheduling, dependency resolution, or distributed transactions.
 
 ## Where it fits
 
-- Personal or small-team agent workflows on one host.
-- Low-volume research, document preparation and architecture assessments.
-- Tasks where inspectable state and clear handoff matter more than automated scheduling.
-- Work where a human or owner agent can reconcile uncertain outcomes.
+- Personal or small-team agent setups on a single host.
+- Extended research, writing, and architecture reviews that span several sessions.
+- Tasks where inspectable local files matter more than distributed orchestration.
+- Workflows where a human or an agent coordinator can inspect results and handle restarts manually.
 
-## What it deliberately does not provide
+## Similar ideas
 
-- A distributed task queue or worker-lease protocol.
-- Automatic durable execution or deterministic replay.
-- Exactly-once side effects.
-- General DAG scheduling, dependency resolution or retry orchestration.
-- High-availability storage, multi-tenant isolation or distributed transactions.
-
-If those are requirements, evaluate an established workflow engine or queue rather than assuming file snapshots supply them.
-
-## Related patterns and comparison
-
-This concept was developed independently from a practical agent-workflow need. The references below were added afterward for comparison; they were not sources used to develop the idea.
-
-- [Kubernetes controllers](https://kubernetes.io/docs/concepts/architecture/controller/) illustrate observation-and-action control loops. TaskFlow narrows the observer's responsibility to reporting recorded progress.
-- [Temporal Workflow Execution](https://docs.temporal.io/workflow-execution) illustrates a substantially richer durable execution model. TaskFlow's snapshots are not an equivalent execution mechanism.
-
-The contribution proposed here is a deliberately small composition for agent-session continuity: explicit work snapshots, linked tasks, an independent notification observer and a clear recovery handoff, without requiring a broker or database.
+- [Kubernetes controllers](https://kubernetes.io/docs/concepts/architecture/controller/)
+- [Temporal Workflow Execution](https://docs.temporal.io/workflow-execution)
 
 ## Open design questions
 
