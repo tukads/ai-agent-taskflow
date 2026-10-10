@@ -148,4 +148,4 @@ TaskFlow is deliberately narrow in scope:
 
 ## Similar ideas
 
-- [Anthropic: Effective harnesses for long-running agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents). The closest prior art: a coding agent keeps a progress file and git history and reads them at the start of each session. TaskFlow applies the same idea to a personal assistant, and adds a watcher that sends progress pings and recovery after usage limits and scheduled restarts.
+- [Anthropic: Effective harnesses for long-running agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents). 
