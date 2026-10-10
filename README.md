@@ -1,4 +1,4 @@
-# AI Agent TaskFlow
+# Personal AI Agent TaskFlow
 
 **Durable task state for long-running AI agents. Survives session restarts, needs no database, and runs on one box.**
 
