@@ -7,11 +7,6 @@ It hits its 5-hour usage limit and its session restarts twice a day, so long job
 To fix that, I started writing task state out to plain JSON files.
 A watcher script checks those files every 2 minutes and posts progress updates to Telegram.
 
-## One task, two sessions
-
-![TaskFlow walkthrough: task starts, progress is saved, the session is interrupted, a new session reads state, then checks actual outcomes before continuing.](assets/taskflow-walkthrough.png)
-
-Saved state preserves the handoff between sessions. When a new session starts, it checks existing artifacts and decides what to do next.
 
 ## The problem
 
